@@ -11,9 +11,9 @@ Usage:
 
 import json
 import sys
-import numpy as np # type: ignore
-import pandas as pd # type: ignore
-from plotnine import ( # type: ignore
+import numpy as np 
+import pandas as pd 
+from plotnine import ( 
     ggplot, aes, geom_col, geom_tile, labs, theme_minimal, theme,
     scale_fill_gradient, element_text
 )
