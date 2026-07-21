@@ -1,3 +1,24 @@
+/// Regression WiSARD: RAMs store access counters and target-value sums
+/// per address, enabling continuous-value prediction instead of class
+/// scoring.
+///
+/// Each RAM's stored value at a given address is the running mean of
+/// all target values seen at that address. Prediction averages these
+/// partial means across all RAMs whose address has been visited at
+/// least `min_zero` times.
+///
+/// # Example
+///
+/// ```
+/// use tin_man::RegressionWisard;
+///
+/// let mut rew = RegressionWisard::new(8, 4, 1);
+/// rew.train(&, 10.0);[1]
+/// rew.train(&, 12.0);[1]
+///
+/// let prediction = rew.predict(&).unwrap();[1]
+/// assert!((prediction - 11.0).abs() < 1e-6);
+/// ```
 use crate::persist::{load_from_file, save_to_file, FileFormat};
 use crate::ram::RegressionRam;
 use rand::seq::SliceRandom;
@@ -17,10 +38,12 @@ pub struct RegressionWisard {
 }
 
 impl RegressionWisard {
-    /// `input_size`: length of the binary-encoded input vector (retina size).
-    /// `address_size`: bits per RAM addressing bus (address space = 2^address_size).
-    /// `min_zero`: minimum access count required for a RAM's address to
-    ///   contribute to a prediction.
+    /// Creates a new, untrained Regression WiSARD model.
+    ///
+    /// - `input_size` / `address_size`: same as [`Wisard::new`].
+    /// - `min_zero`: minimum access count required for a RAM's address
+    ///   to contribute to a prediction. Addresses seen fewer times are
+    ///   excluded, reducing noise from rarely-seen patterns.
     pub fn new(input_size: usize, address_size: usize, min_zero: u32) -> Self {
         assert!(
             address_size > 0 && address_size <= input_size,

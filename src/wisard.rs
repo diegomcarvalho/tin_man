@@ -1,3 +1,28 @@
+/// Standard WiSARD classifier: one discriminator per class, sharing a
+/// single randomized retina-to-RAM mapping across all classes.
+///
+/// # How it works
+///
+/// Each class gets a [`Discriminator`](crate::discriminator) — a set of
+/// RAM nodes, each fed by a fixed subset of input bits (a "tuple").
+/// During training, the discriminator's RAMs record which addresses
+/// were seen. During classification, each discriminator's RAMs vote on
+/// whether they recognize the input, and the class with the highest
+/// score wins.
+///
+/// # Example
+///
+/// ```
+/// use tin_man::Wisard;
+///
+/// let mut w = Wisard::new(8, 4, 0.1, true, false);
+/// w.train(&, "cold");[1]
+/// w.train(&, "hot");[1]
+///
+/// let (label, _confidence) = w.classify(&).unwrap();[1]
+/// assert_eq!(label, "hot");
+/// ```
+
 use crate::discriminator::Discriminator;
 use crate::persist::{load_from_file, save_to_file, FileFormat};
 use rand::seq::SliceRandom;
@@ -21,12 +46,28 @@ pub struct Wisard {
 }
 
 impl Wisard {
-    /// `input_size`: length of the binary-encoded input vector (retina size).
-    /// `address_size`: bits per RAM addressing bus (address space = 2^address_size).
-    /// `confidence_threshold`: min score gap between top two classes to stop bleaching.
-    /// `bleaching_enabled`: false = plain binary WiSARD (fixed threshold=1);
-    ///   true = adaptive binary-search bleaching.
-    /// `ignore_zero`: skip training/counting on the all-zero tuple address.
+    /// Creates a new, untrained WiSARD model.
+    ///
+    /// # Parameters
+    ///
+    /// - `input_size`: length of the binary-encoded input vector (retina size).
+    /// - `address_size`: number of input bits routed into each RAM
+    ///   (address space = 2^`address_size`). Must satisfy
+    ///   `0 < address_size <= input_size`.
+    /// - `confidence_threshold`: minimum score gap between the top two
+    ///   classes required to stop the bleaching search. Only used when
+    ///   `bleaching_enabled` is `true`.
+    /// - `bleaching_enabled`: if `false`, classification uses a fixed
+    ///   threshold of 1 (plain binary WiSARD). If `true`, an adaptive
+    ///   binary-search bleaching threshold is used to resolve ties and
+    ///   reduce overtraining sensitivity.
+    /// - `ignore_zero`: if `true`, RAMs skip training/counting on the
+    ///   all-zero tuple address, preventing a common "background"
+    ///   pattern from dominating RAM statistics.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `address_size` is `0` or greater than `input_size`.
     pub fn new(
         input_size: usize,
         address_size: usize,
@@ -69,14 +110,29 @@ impl Wisard {
         }
     }
 
+    /// Trains the model on a single (input, label) pair.
+    ///
+    /// If `label` has not been seen before, a new discriminator is
+    /// created for it lazily — you do not need to pre-declare classes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `input.len()` does not equal `input_size`.
     pub fn train(&mut self, input: &[u8], label: &str) {
         assert_eq!(input.len(), self.input_size, "input size mismatch");
         let id = self.label_id(label);
         self.discriminators[id].train(input);
     }
 
-    /// Classifies `input`, returning the predicted label and confidence
-    /// (fraction of RAMs firing).
+    /// Classifies `input`, returning the predicted label and a
+    /// confidence score in `[0.0, 1.0]` (fraction of RAMs firing for
+    /// the winning discriminator).
+    ///
+    /// Returns `None` if the model has not been trained on any class.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `input.len()` does not equal `input_size`.
     pub fn classify(&self, input: &[u8]) -> Option<(String, f64)> {
         assert_eq!(input.len(), self.input_size, "input size mismatch");
         if self.discriminators.is_empty() {
@@ -141,7 +197,7 @@ impl Wisard {
     }
 
     /// Saves the trained model (retina mapping, labels, and all RAM
-    /// counters) to `path` in the given format.
+    /// counters) to `path` in the given [`FileFormat`].
     pub fn save_to_file(&self, path: impl AsRef<Path>, format: FileFormat) -> IoResult<()> {
         save_to_file(self, path, format)
     }

@@ -9,6 +9,34 @@ use std::path::Path;
 
 /// ClusWiSARD: allows multiple discriminators ("clusters") per class,
 /// spawning new ones when an existing cluster no longer matches well.
+///
+/// This handles classes with heterogeneous internal structure — e.g. a
+/// "vehicle" class containing both cars and trucks — by letting each
+/// sub-pattern get its own discriminator rather than forcing one
+/// discriminator to average across dissimilar inputs.
+///
+/// # Example
+///
+/// ```
+/// use tin_man::ClusWisard;
+///
+/// let mut clus = ClusWisard::new(
+///     8,    // input_size
+///     4,    // address_size
+///     0.3,  // min_score: similarity required to reuse a cluster
+///     20,   // threshold: max training cycles per cluster
+///     5,    // discriminator_limit: max clusters per class
+///     0.1,  // confidence_threshold (bleaching)
+///     true, // bleaching_enabled
+///     false // ignore_zero
+/// );
+///
+/// clus.train(&, "cold");[1]
+/// clus.train(&, "hot");[1]
+///
+/// let (label, _score) = clus.classify(&).unwrap();[1]
+/// assert_eq!(label, "cold");
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct ClusWisard {
     address_size: usize,
@@ -24,17 +52,21 @@ pub struct ClusWisard {
 }
 
 impl ClusWisard {
-    /// `input_size`: length of the binary-encoded input vector (retina size).
-    /// `address_size`: bits per RAM addressing bus (address space = 2^address_size).
-    /// `min_score`: minimum similarity score required to reuse an existing
-    ///   cluster instead of spawning a new one.
-    /// `threshold`: max training cycles a cluster can absorb before a new
-    ///   one is spawned for that class.
-    /// `discriminator_limit`: max number of clusters allowed per class.
-    /// `confidence_threshold`: min score gap used when bleaching is enabled.
-    /// `bleaching_enabled`: false = fixed threshold=1 scoring; true = adaptive
-    ///   binary-search bleaching per cluster.
-    /// `ignore_zero`: skip training/counting on the all-zero tuple address.
+    /// Creates a new, untrained ClusWiSARD model.
+    ///
+    /// # Parameters
+    ///
+    /// - `input_size` / `address_size`: same as [`Wisard::new`].
+    /// - `min_score`: minimum similarity score (fraction of RAMs
+    ///   firing) required to reuse an existing cluster during training
+    ///   instead of spawning a new one.
+    /// - `threshold`: maximum number of training cycles a single
+    ///   cluster may absorb before a new cluster is spawned for that
+    ///   class, even if `min_score` is satisfied.
+    /// - `discriminator_limit`: maximum number of clusters allowed per
+    ///   class, capping memory growth.
+    /// - `confidence_threshold` / `bleaching_enabled` / `ignore_zero`:
+    ///   same semantics as in [`Wisard::new`], applied per-cluster.
     pub fn new(
         input_size: usize,
         address_size: usize,
@@ -75,10 +107,10 @@ impl ClusWisard {
         mapping.chunks(address_size).map(|c| c.to_vec()).collect()
     }
 
-    /// Trains on (input, label). Reuses the best-matching existing cluster
-    /// for that class if its score clears `min_score` and it hasn't
-    /// exceeded `threshold` training cycles; otherwise spawns a new
-    /// cluster, capped at `discriminator_limit`.
+    /// Trains on (input, label). Reuses the best-matching existing
+    /// cluster for `label` if its score clears `min_score` and it
+    /// hasn't exceeded `threshold` training cycles; otherwise spawns a
+    /// new cluster, capped at `discriminator_limit`.
     pub fn train(&mut self, input: &[u8], label: &str) {
         assert_eq!(input.len(), self.input_size, "input size mismatch");
 
@@ -124,7 +156,7 @@ impl ClusWisard {
     }
 
     /// Classifies by taking, per class, the max score across its
-    /// clusters, then choosing the best class overall.
+    /// clusters, then returning the best class overall.
     pub fn classify(&self, input: &[u8]) -> Option<(String, f64)> {
         assert_eq!(input.len(), self.input_size, "input size mismatch");
         let mut best_label = String::new();
