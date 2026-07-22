@@ -16,3 +16,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bincode = "1.3"
 rayon = "1.10"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "wisard_bench"
+harness = false
