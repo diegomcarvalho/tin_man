@@ -1,8 +1,12 @@
 # tin_man
 
-A Rust library implementing the WiSARD family of weightless neural
-networks, plus thermometer-style feature encoders and full model
-persistence.
+A Rust library implementing the WiSARD family of weightless neural networks, plus thermometer-style feature encoders and full model persistence.
+
+**WiSARD** (Wilkie, Stonham, and Aleksander’s Recognition Device) is a pioneering **Weightless Neural Network (WNN)** model developed in the **1970s and 1980s** by Bruce Wilkie, John Stonham, and Igor Aleksander. Unlike traditional neural networks that store knowledge in synaptic weights, WiSARD uses **Random Access Memory (RAM)** nodes to store learned patterns directly in lookup tables.
+
+Igor Aleksander is an emeritus professor of Neural Systems Engineering in the Department of Electrical and Electronic Engineering at Imperial College London. He worked in artificial intelligence and neural networks, and advised my advisor, Felipe Maia Galvão França, who taught me the simplicity and the power of WNNs. 
+
+This Rust library was named after the Tin Man. He, also known as the Tin Woodman or Nick Chopper, is a fictional character created by L. Frank Baum in his 1900 novel *The Wonderful Wizard of Oz*.  He is a sentient being made entirely of metal who seeks a heart to restore his capacity for emotion. As an engineer, I would like to remind you that *tin never, ever rusts*.
 
 ## Models
 
