@@ -8,7 +8,9 @@
 /// During training, the discriminator's RAMs record which addresses
 /// were seen. During classification, each discriminator's RAMs vote on
 /// whether they recognize the input, and the class with the highest
-/// score wins.
+/// score wins. Classification work is parallelized across
+/// discriminators using [`rayon`], so models with many classes benefit
+/// from multi-core scaling.
 ///
 /// # Example
 ///
@@ -25,8 +27,10 @@
 
 use crate::discriminator::Discriminator;
 use crate::persist::{load_from_file, save_to_file, FileFormat};
+use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{thread_rng, SeedableRng};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::io::Result as IoResult;
 use std::path::Path;
@@ -68,6 +72,13 @@ impl Wisard {
     /// # Panics
     ///
     /// Panics if `address_size` is `0` or greater than `input_size`.
+    ///
+    /// # Note
+    ///
+    /// The retina-to-RAM mapping is shuffled using the thread-local RNG
+    /// ([`rand::thread_rng`]), so results are **not** reproducible across
+    /// runs. Use [`Wisard::new_with_seed`] when deterministic behavior is
+    /// required (e.g. in tests).
     pub fn new(
         input_size: usize,
         address_size: usize,
@@ -82,6 +93,62 @@ impl Wisard {
         let mut mapping: Vec<usize> = (0..input_size).collect();
         mapping.shuffle(&mut thread_rng());
 
+        Self::from_parts(
+            input_size,
+            address_size,
+            mapping,
+            confidence_threshold,
+            bleaching_enabled,
+            ignore_zero,
+        )
+    }
+
+    /// Creates a new, untrained WiSARD model with a deterministic
+    /// retina-to-RAM mapping, seeded from `seed`.
+    ///
+    /// Identical to [`Wisard::new`] except the internal shuffle uses a
+    /// seeded [`StdRng`] instead of the thread-local RNG, so two models
+    /// constructed with the same parameters and `seed` will always
+    /// produce the same mapping — and therefore identical training and
+    /// classification behavior given the same inputs.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `address_size` is `0` or greater than `input_size`.
+    pub fn new_with_seed(
+        input_size: usize,
+        address_size: usize,
+        confidence_threshold: f64,
+        bleaching_enabled: bool,
+        ignore_zero: bool,
+        seed: u64,
+    ) -> Self {
+        assert!(
+            address_size > 0 && address_size <= input_size,
+            "address_size must be in (0, input_size]"
+        );
+        let mut rng = StdRng::seed_from_u64(seed);
+        let mut mapping: Vec<usize> = (0..input_size).collect();
+        mapping.shuffle(&mut rng);
+
+        Self::from_parts(
+            input_size,
+            address_size,
+            mapping,
+            confidence_threshold,
+            bleaching_enabled,
+            ignore_zero,
+        )
+    }
+
+    fn from_parts(
+        input_size: usize,
+        address_size: usize,
+        mapping: Vec<usize>,
+        confidence_threshold: f64,
+        bleaching_enabled: bool,
+        ignore_zero: bool,
+    ) -> Self {
         Wisard {
             address_size,
             input_size,
@@ -130,6 +197,9 @@ impl Wisard {
     ///
     /// Returns `None` if the model has not been trained on any class.
     ///
+    /// Per-discriminator address precomputation and scoring are both
+    /// parallelized across available CPU cores via [`rayon`].
+    ///
     /// # Panics
     ///
     /// Panics if `input.len()` does not equal `input_size`.
@@ -139,8 +209,11 @@ impl Wisard {
             return None;
         }
 
-        let addr_cache: Vec<Vec<usize>> =
-            self.discriminators.iter().map(|d| d.precompute_addresses(input)).collect();
+        let addr_cache: Vec<Vec<usize>> = self
+            .discriminators
+            .par_iter()
+            .map(|d| d.precompute_addresses(input))
+            .collect();
 
         if !self.bleaching_enabled {
             return self.classify_fixed_threshold(&addr_cache, 1);
@@ -149,22 +222,27 @@ impl Wisard {
     }
 
     fn classify_fixed_threshold(&self, addr_cache: &[Vec<usize>], threshold: u16) -> Option<(String, f64)> {
-        let mut best_idx = 0;
-        let mut best_score = -1.0;
-        for (i, (disc, addrs)) in self.discriminators.iter().zip(addr_cache.iter()).enumerate() {
-            let score = disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64;
-            if score > best_score {
-                best_score = score;
-                best_idx = i;
-            }
-        }
+        let (best_idx, best_score) = self
+            .discriminators
+            .par_iter()
+            .zip(addr_cache.par_iter())
+            .enumerate()
+            .map(|(i, (disc, addrs))| {
+                let score = disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64;
+                (i, score)
+            })
+            .reduce(
+                || (0usize, -1.0f64),
+                |a, b| if b.1 > a.1 { b } else { a },
+            );
+
         Some((self.labels[best_idx].clone(), best_score))
     }
 
     fn classify_with_bleaching(&self, addr_cache: &[Vec<usize>]) -> Option<(String, f64)> {
         let global_max = addr_cache
-            .iter()
-            .zip(self.discriminators.iter())
+            .par_iter()
+            .zip(self.discriminators.par_iter())
             .map(|(addrs, disc)| disc.max_count(addrs))
             .max()
             .unwrap_or(0)
@@ -177,8 +255,8 @@ impl Wisard {
             let mid = lo + (hi - lo) / 2;
             let mut scores: Vec<(usize, f64)> = self
                 .discriminators
-                .iter()
-                .zip(addr_cache.iter())
+                .par_iter()
+                .zip(addr_cache.par_iter())
                 .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
                 .enumerate()
                 .collect();

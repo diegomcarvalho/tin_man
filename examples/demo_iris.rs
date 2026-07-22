@@ -1,5 +1,8 @@
-use tin_man::{FileFormat, Wisard, LinearThermometer};
-use rand::{distributions::Uniform, Rng};
+use tin_man::{FileFormat, Wisard, DistributiveThermometer};
+use rand::distributions::Uniform;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+
 
 // Iris dataset (150 samples) as Rust vectors
 // species: 0 = setosa, 1 = versicolor, 2 = virginica
@@ -90,20 +93,20 @@ pub const SPECIES: [u8; 150] = [
 fn main() {
 
     let range = Uniform::new(0, 150);
-    let mut rng = rand::thread_rng();
+    let mut rng = StdRng::seed_from_u64(12770); // any u64 seed you choose
 
     let numbers: Vec<usize> = (0..100)
         .map(|_| rng.sample(&range))
         .collect();
     
     // Standard WiSARD
-    let mut w: Wisard = Wisard::new(64, 4, 0.1, true, false);
+    let mut w: Wisard = Wisard::new_with_seed(64, 4, 0.1, true, false, 12770);
 
 
-    let linear_sl = LinearThermometer::fit(&SEPAL_LENGTH, 16);
-    let linear_sw = LinearThermometer::fit(&SEPAL_WIDTH, 16);
-    let linear_pl = LinearThermometer::fit(&PETAL_LENGTH, 16);
-    let linear_pw = LinearThermometer::fit(&PETAL_WIDTH, 16);
+    let linear_sl = DistributiveThermometer::fit(&SEPAL_LENGTH, 16);
+    let linear_sw = DistributiveThermometer::fit(&SEPAL_WIDTH, 16);
+    let linear_pl = DistributiveThermometer::fit(&PETAL_LENGTH, 16);
+    let linear_pw = DistributiveThermometer::fit(&PETAL_WIDTH, 16);
 
     for i in numbers {
         let v1 = linear_sl.encode(SEPAL_LENGTH[i]);
