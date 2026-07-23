@@ -91,7 +91,7 @@ impl PyWisard {
         ignore_zero: bool,
     ) -> Self {
         PyWisard {
-            inner: Wisard::new(input_size, address_size, confidence_threshold, bleaching_enabled, ignore_zero),
+            inner: Wisard::new(input_size, address_size, confidence_threshold, bleaching_enabled, ignore_zero,true),
         }
     }
 

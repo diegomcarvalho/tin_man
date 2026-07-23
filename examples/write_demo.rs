@@ -1,7 +1,7 @@
 use tin_man::{FileFormat, Wisard, ClusWisard, RegressionWisard};
 
 fn main() -> std::io::Result<()> {
-    let mut w = Wisard::new(64, 8, 0.1, true, false);
+    let mut w = Wisard::new(64, 8, 0.1, true, false, true);
     w.train(&vec![1, 0, 1, 0].repeat(16), "class_a");
     w.train(&vec![0, 1, 0, 1].repeat(16), "class_b");
 

@@ -21,7 +21,7 @@ fn main() {
     let enc1 = LinearThermometer::fit(&feature_1, 4);
     let enc2 = LinearThermometer::fit(&feature_2, 4);
 
-    let mut w = Wisard::new(8, 4, 0.1, true, false);
+    let mut w = Wisard::new(8, 4, 0.1, true, false, true);
     let input: Vec<u8> = enc1
         .encode(feature_1[0])
         .into_iter()

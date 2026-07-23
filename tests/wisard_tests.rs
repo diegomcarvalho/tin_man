@@ -10,7 +10,7 @@ fn pattern_b(len: usize) -> Vec<u8> {
 
 #[test]
 fn classifies_exact_training_sample_correctly() {
-    let mut w = Wisard::new(64, 8, 0.1, false, false);
+    let mut w = Wisard::new(64, 8, 0.1, false, false, true);
     w.train(&pattern_a(64), "a");
     w.train(&pattern_b(64), "b");
 
@@ -21,7 +21,7 @@ fn classifies_exact_training_sample_correctly() {
 
 #[test]
 fn distinguishes_two_well_separated_classes() {
-    let mut w = Wisard::new(64, 8, 0.1, true, false);
+    let mut w = Wisard::new(64, 8, 0.1, true, false, true);
     for _ in 0..5 {
         w.train(&pattern_a(64), "a");
     }
@@ -37,14 +37,14 @@ fn distinguishes_two_well_separated_classes() {
 
 #[test]
 fn returns_none_when_untrained() {
-    let w = Wisard::new(32, 4, 0.1, true, false);
+    let w = Wisard::new(32, 4, 0.1, true, false, true);
     assert!(w.classify(&vec![0u8; 32]).is_none());
 }
 
 #[test]
 fn bleaching_and_binary_modes_agree_on_clear_cases() {
-    let mut w_binary = Wisard::new(64, 8, 0.1, false, false);
-    let mut w_bleach = Wisard::new(64, 8, 0.1, true, false);
+    let mut w_binary = Wisard::new(64, 8, 0.1, false, false, true);
+    let mut w_bleach = Wisard::new(64, 8, 0.1, true, false, true);
 
     for _ in 0..3 {
         w_binary.train(&pattern_a(64), "a");
@@ -61,7 +61,7 @@ fn bleaching_and_binary_modes_agree_on_clear_cases() {
 
 #[test]
 fn ignore_zero_does_not_crash_and_still_classifies() {
-    let mut w = Wisard::new(32, 4, 0.1, true, true);
+    let mut w = Wisard::new(32, 4, 0.1, true, true, true);
     w.train(&vec![0u8; 32], "all_zero");
     w.train(&pattern_a(32), "mixed");
 
@@ -72,14 +72,14 @@ fn ignore_zero_does_not_crash_and_still_classifies() {
 #[test]
 #[should_panic(expected = "input size mismatch")]
 fn train_panics_on_wrong_input_size() {
-    let mut w = Wisard::new(32, 4, 0.1, true, false);
+    let mut w = Wisard::new(32, 4, 0.1, true, false, true);
     w.train(&vec![0u8; 16], "bad");
 }
 
 #[test]
 #[should_panic(expected = "input size mismatch")]
 fn classify_panics_on_wrong_input_size() {
-    let mut w = Wisard::new(32, 4, 0.1, true, false);
+    let mut w = Wisard::new(32, 4, 0.1, true, false,true);
     w.train(&vec![0u8; 32], "ok");
     let _ = w.classify(&vec![0u8; 16]);
 }

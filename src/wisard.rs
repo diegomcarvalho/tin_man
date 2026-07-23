@@ -8,20 +8,22 @@
 /// During training, the discriminator's RAMs record which addresses
 /// were seen. During classification, each discriminator's RAMs vote on
 /// whether they recognize the input, and the class with the highest
-/// score wins. Classification work is parallelized across
-/// discriminators using [`rayon`], so models with many classes benefit
-/// from multi-core scaling.
+/// score wins. Classification work can optionally be parallelized
+/// across discriminators using [`rayon`] — see the `parallel`
+/// constructor parameter — which benefits models with many classes on
+/// multi-core machines, at the cost of thread-spawning overhead for
+/// small models.
 ///
 /// # Example
 ///
 /// ```
 /// use tin_man::Wisard;
 ///
-/// let mut w = Wisard::new(8, 4, 0.1, true, false);
-/// w.train(&, "cold");[1]
-/// w.train(&, "hot");[1]
+/// let mut w = Wisard::new(8, 4, 0.1, true, false, false);
+/// w.train(&, "cold");[2]
+/// w.train(&, "hot");[2]
 ///
-/// let (label, _confidence) = w.classify(&).unwrap();[1]
+/// let (label, _confidence) = w.classify(&).unwrap();[2]
 /// assert_eq!(label, "hot");
 /// ```
 
@@ -47,6 +49,7 @@ pub struct Wisard {
     confidence_threshold: f64,
     bleaching_enabled: bool,
     ignore_zero: bool,
+    parallel: bool,
 }
 
 impl Wisard {
@@ -68,6 +71,12 @@ impl Wisard {
     /// - `ignore_zero`: if `true`, RAMs skip training/counting on the
     ///   all-zero tuple address, preventing a common "background"
     ///   pattern from dominating RAM statistics.
+    /// - `parallel`: if `true`, classification work is spread across
+    ///   discriminators using [`rayon`]'s parallel iterators. If
+    ///   `false`, classification runs sequentially on a single thread.
+    ///   Parallel mode benefits models with many classes/discriminators;
+    ///   for small models, sequential mode avoids thread-spawning
+    ///   overhead and can be faster.
     ///
     /// # Panics
     ///
@@ -85,6 +94,7 @@ impl Wisard {
         confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
+        parallel: bool,
     ) -> Self {
         assert!(
             address_size > 0 && address_size <= input_size,
@@ -100,6 +110,7 @@ impl Wisard {
             confidence_threshold,
             bleaching_enabled,
             ignore_zero,
+            parallel,
         )
     }
 
@@ -121,6 +132,7 @@ impl Wisard {
         confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
+        parallel: bool,
         seed: u64,
     ) -> Self {
         assert!(
@@ -138,6 +150,7 @@ impl Wisard {
             confidence_threshold,
             bleaching_enabled,
             ignore_zero,
+            parallel,
         )
     }
 
@@ -148,6 +161,7 @@ impl Wisard {
         confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
+        parallel: bool,
     ) -> Self {
         Wisard {
             address_size,
@@ -158,6 +172,7 @@ impl Wisard {
             confidence_threshold,
             bleaching_enabled,
             ignore_zero,
+            parallel,
         }
     }
 
@@ -197,8 +212,10 @@ impl Wisard {
     ///
     /// Returns `None` if the model has not been trained on any class.
     ///
-    /// Per-discriminator address precomputation and scoring are both
-    /// parallelized across available CPU cores via [`rayon`].
+    /// Per-discriminator address precomputation and scoring run in
+    /// parallel across available CPU cores via [`rayon`] when
+    /// `parallel` was set to `true` at construction, or sequentially
+    /// on a single thread otherwise.
     ///
     /// # Panics
     ///
@@ -209,11 +226,17 @@ impl Wisard {
             return None;
         }
 
-        let addr_cache: Vec<Vec<usize>> = self
-            .discriminators
-            .par_iter()
-            .map(|d| d.precompute_addresses(input))
-            .collect();
+        let addr_cache: Vec<Vec<usize>> = if self.parallel {
+            self.discriminators
+                .par_iter()
+                .map(|d| d.precompute_addresses(input))
+                .collect()
+        } else {
+            self.discriminators
+                .iter()
+                .map(|d| d.precompute_addresses(input))
+                .collect()
+        };
 
         if !self.bleaching_enabled {
             return self.classify_fixed_threshold(&addr_cache, 1);
@@ -222,44 +245,73 @@ impl Wisard {
     }
 
     fn classify_fixed_threshold(&self, addr_cache: &[Vec<usize>], threshold: u16) -> Option<(String, f64)> {
-        let (best_idx, best_score) = self
-            .discriminators
-            .par_iter()
-            .zip(addr_cache.par_iter())
-            .enumerate()
-            .map(|(i, (disc, addrs))| {
-                let score = disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64;
-                (i, score)
-            })
-            .reduce(
-                || (0usize, -1.0f64),
-                |a, b| if b.1 > a.1 { b } else { a },
-            );
+        let (best_idx, best_score) = if self.parallel {
+            self.discriminators
+                .par_iter()
+                .zip(addr_cache.par_iter())
+                .enumerate()
+                .map(|(i, (disc, addrs))| {
+                    let score = disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64;
+                    (i, score)
+                })
+                .reduce(
+                    || (0usize, -1.0f64),
+                    |a, b| if b.1 > a.1 { b } else { a },
+                )
+        } else {
+            self.discriminators
+                .iter()
+                .zip(addr_cache.iter())
+                .enumerate()
+                .map(|(i, (disc, addrs))| {
+                    let score = disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64;
+                    (i, score)
+                })
+                .fold((0usize, -1.0f64), |a, b| if b.1 > a.1 { b } else { a })
+        };
 
         Some((self.labels[best_idx].clone(), best_score))
     }
 
     fn classify_with_bleaching(&self, addr_cache: &[Vec<usize>]) -> Option<(String, f64)> {
-        let global_max = addr_cache
-            .par_iter()
-            .zip(self.discriminators.par_iter())
-            .map(|(addrs, disc)| disc.max_count(addrs))
-            .max()
-            .unwrap_or(0)
-            .max(1);
+        let global_max = if self.parallel {
+            addr_cache
+                .par_iter()
+                .zip(self.discriminators.par_iter())
+                .map(|(addrs, disc)| disc.max_count(addrs))
+                .max()
+                .unwrap_or(0)
+                .max(1)
+        } else {
+            addr_cache
+                .iter()
+                .zip(self.discriminators.iter())
+                .map(|(addrs, disc)| disc.max_count(addrs))
+                .max()
+                .unwrap_or(0)
+                .max(1)
+        };
 
         let mut lo: u16 = 1;
         let hi: u16 = global_max;
 
         let best: (usize, f64) = loop {
             let mid = lo + (hi - lo) / 2;
-            let mut scores: Vec<(usize, f64)> = self
-                .discriminators
-                .par_iter()
-                .zip(addr_cache.par_iter())
-                .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
-                .enumerate()
-                .collect();
+            let mut scores: Vec<(usize, f64)> = if self.parallel {
+                self.discriminators
+                    .par_iter()
+                    .zip(addr_cache.par_iter())
+                    .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
+                    .enumerate()
+                    .collect()
+            } else {
+                self.discriminators
+                    .iter()
+                    .zip(addr_cache.iter())
+                    .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
+                    .enumerate()
+                    .collect()
+            };
 
             scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
             let top = scores[0];

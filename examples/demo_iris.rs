@@ -100,7 +100,7 @@ fn main() {
         .collect();
     
     // Standard WiSARD
-    let mut w: Wisard = Wisard::new_with_seed(64, 4, 0.1, true, false, 12770);
+    let mut w: Wisard = Wisard::new_with_seed(64, 4, 0.1, true, false, true, 12770);
 
 
     let linear_sl = DistributiveThermometer::fit(&SEPAL_LENGTH, 16);

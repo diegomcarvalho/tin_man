@@ -24,7 +24,7 @@ fn bench_wisard_train(c: &mut Criterion) {
 
     group.bench_function("train_single_sample", |b| {
         let mut rng = rand::thread_rng();
-        let mut w = Wisard::new(INPUT_SIZE, ADDRESS_SIZE, 0.1, true, false);
+        let mut w = Wisard::new(INPUT_SIZE, ADDRESS_SIZE, 0.1, true, false, true);
         // Pre-populate a few classes so the discriminator lookup isn't
         // always hitting the "new class" cold path.
         for c_id in 0..NUM_CLASSES {
@@ -47,7 +47,7 @@ fn bench_wisard_classify(c: &mut Criterion) {
     group.throughput(Throughput::Elements(1));
 
     let mut rng = rand::thread_rng();
-    let mut w = Wisard::new(INPUT_SIZE, ADDRESS_SIZE, 0.1, true, false);
+    let mut w = Wisard::new(INPUT_SIZE, ADDRESS_SIZE, 0.1, true, false, true);
     for c_id in 0..NUM_CLASSES {
         for _ in 0..TRAIN_SAMPLES {
             let input = random_input(&mut rng, INPUT_SIZE);
@@ -205,7 +205,7 @@ fn bench_wisard_address_size_sweep(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     for &addr_size in &[4usize, 8, 16, 32] {
-        let mut w = Wisard::new(INPUT_SIZE, addr_size, 0.1, true, false);
+        let mut w = Wisard::new(INPUT_SIZE, addr_size, 0.1, true, false, true);
         for c_id in 0..NUM_CLASSES {
             for _ in 0..TRAIN_SAMPLES {
                 let input = random_input(&mut rng, INPUT_SIZE);
