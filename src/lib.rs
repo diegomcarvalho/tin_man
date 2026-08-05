@@ -89,7 +89,7 @@ mod clus_regression_wisard;
 
 pub use clus_regression_wisard::ClusRegressionWisard;
 pub use clus_wisard::ClusWisard;
-pub use encoders::{DistributiveThermometer, GaussianThermometer, LinearThermometer};
+pub use encoders::{DistributiveThermometer, GaussianThermometer, LinearThermometer, KernelCanvas};
 pub use persist::FileFormat;
 pub use regression_wisard::RegressionWisard;
 pub use wisard::Wisard;

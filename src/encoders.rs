@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 
 /// A linear thermometer encoder: maps a continuous value to a fixed-width
 /// binary vector where the number of "1" bits grows linearly with the
@@ -179,4 +181,166 @@ fn erf(x: f64) -> f64 {
     let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * (-x * x).exp();
 
     sign * y
+}
+
+/// Converts variable-length sequences of points into a fixed-size
+/// binary "canvas" via random kernels and thermometer-encoded
+/// proximity.
+///
+/// # How it works
+///
+/// A set of `num_kernels` kernels (random points) are placed uniformly
+/// in `[-1, 1]^dimension`. For each input point, the kernels closest
+/// to it (controlled by `activation_degree`) are "activated": their
+/// proximity to the point is encoded via an internal
+/// [`LinearThermometer`] into `bits_per_kernel` bits and OR-ed into
+/// the canvas. Feeding a whole sequence of points accumulates all
+/// their activations into one canvas, exactly like paint strokes
+/// building up a picture — the result is always the same size
+/// (`num_kernels * bits_per_kernel`) regardless of sequence length.
+///
+/// # Example
+///
+/// ```
+/// use tin_man::encoders::KernelCanvas;
+///
+/// let canvas = KernelCanvas::new(32, 2, 4, 0.2, 42);
+/// let stroke = vec![vec![-0.8, -0.8], vec![-0.4, -0.4], vec![0.0, 0.0]];
+/// let pattern = canvas.encode_sequence(&stroke);
+/// assert_eq!(pattern.len(), canvas.output_size());
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KernelCanvas {
+    kernels: Vec<Vec<f64>>,
+    dimension: usize,
+    bits_per_kernel: usize,
+    activation_degree: f64,
+    thermometer: LinearThermometer,
+}
+
+impl KernelCanvas {
+    /// Creates a new `KernelCanvas`.
+    ///
+    /// # Parameters
+    ///
+    /// - `num_kernels`: number of kernels placed in the space. Higher
+    ///   values give finer-grained spatial resolution at the cost of a
+    ///   larger output size.
+    /// - `dimension`: dimensionality of each input point (e.g. `2` for
+    ///   `(x, y)` coordinates).
+    /// - `bits_per_kernel`: number of output bits allocated to encode
+    ///   each kernel's activation strength. Values above `1` let the
+    ///   thermometer encode graded proximity instead of a flat flag.
+    /// - `activation_degree`: fraction of kernels (by proximity rank)
+    ///   that receive a non-zero encoding per point, in `(0.0, 1.0]`.
+    ///   Small values (e.g. `0.05`–`0.2`) approximate a "winner-takes-
+    ///   most" activation; `1.0` activates every kernel with a
+    ///   distance-graded strength.
+    /// - `seed`: seeds kernel placement for reproducibility.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `num_kernels`, `dimension`, or `bits_per_kernel` is
+    /// `0`, or if `activation_degree` is outside `(0.0, 1.0]`.
+    pub fn new(
+        num_kernels: usize,
+        dimension: usize,
+        bits_per_kernel: usize,
+        activation_degree: f64,
+        seed: u64,
+    ) -> Self {
+        assert!(num_kernels > 0, "num_kernels must be > 0");
+        assert!(dimension > 0, "dimension must be > 0");
+        assert!(bits_per_kernel > 0, "bits_per_kernel must be > 0");
+        assert!(
+            activation_degree > 0.0 && activation_degree <= 1.0,
+            "activation_degree must be in (0.0, 1.0]"
+        );
+
+        let mut rng = StdRng::seed_from_u64(seed);
+        let kernels: Vec<Vec<f64>> = (0..num_kernels)
+            .map(|_| (0..dimension).map(|_| rng.gen_range(-1.0..=1.0)).collect())
+            .collect();
+
+        // Max Euclidean distance in [-1, 1]^dimension is 2*sqrt(dimension).
+        // Proximity = max_dist - distance, ranging over [0, max_dist].
+        let max_dist = 2.0 * (dimension as f64).sqrt();
+        let thermometer = LinearThermometer::fit(&[0.0, max_dist], bits_per_kernel);
+
+        KernelCanvas {
+            kernels,
+            dimension,
+            bits_per_kernel,
+            activation_degree,
+            thermometer,
+        }
+    }
+
+    fn distance(a: &[f64], b: &[f64]) -> f64 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).powi(2))
+            .sum::<f64>()
+            .sqrt()
+    }
+
+    fn active_kernel_count(&self) -> usize {
+        ((self.kernels.len() as f64) * self.activation_degree)
+            .ceil()
+            .max(1.0) as usize
+    }
+
+    /// OR-stamps a single point's kernel activations into `canvas`.
+    fn stamp_point(&self, point: &[f64], canvas: &mut [u8]) {
+        assert_eq!(point.len(), self.dimension, "point dimension mismatch");
+
+        let max_dist = 2.0 * (self.dimension as f64).sqrt();
+        let mut distances: Vec<(usize, f64)> = self
+            .kernels
+            .iter()
+            .enumerate()
+            .map(|(i, k)| (i, Self::distance(point, k)))
+            .collect();
+        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        let active_count = self.active_kernel_count();
+        for &(kernel_idx, dist) in distances.iter().take(active_count) {
+            let proximity = (max_dist - dist).max(0.0);
+            let bits = self.thermometer.encode(proximity);
+            let start = kernel_idx * self.bits_per_kernel;
+            for (b, bit) in bits.iter().enumerate() {
+                canvas[start + b] |= bit;
+            }
+        }
+    }
+
+    /// Encodes a single point into a fresh, fixed-size canvas.
+    pub fn encode_point(&self, point: &[f64]) -> Vec<u8> {
+        let mut canvas = vec![0u8; self.output_size()];
+        self.stamp_point(point, &mut canvas);
+        canvas
+    }
+
+    /// Encodes a variable-length sequence of points (e.g. a
+    /// time-series stroke) into a single fixed-size canvas. Every
+    /// point's kernel activations are OR-ed together, so the output
+    /// size never depends on `points.len()`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any point's length doesn't match `dimension`.
+    pub fn encode_sequence(&self, points: &[Vec<f64>]) -> Vec<u8> {
+        let mut canvas = vec![0u8; self.output_size()];
+        for point in points {
+            self.stamp_point(point, &mut canvas);
+        }
+        canvas
+    }
+
+    /// Total output size (`num_kernels * bits_per_kernel`). Pass this
+    /// directly as `input_size` when constructing a `Wisard`,
+    /// `ClusWisard`, etc.
+    pub fn output_size(&self) -> usize {
+        self.kernels.len() * self.bits_per_kernel
+    }
 }
