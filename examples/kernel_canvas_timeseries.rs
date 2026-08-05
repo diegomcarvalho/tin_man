@@ -88,6 +88,9 @@ fn main() {
     println!("Trained on {} diagonal strokes and {} circle strokes.\n",
         diagonal_train_seeds.len(), circle_train_seeds.len());
 
+    let _ = w.save_to_file("wisard.json",tin_man::FileFormat::Json);
+
+
     // --- Test set ---
     // Fresh strokes with different point counts / jitter / seeds than
     // training, to confirm the model generalizes rather than
