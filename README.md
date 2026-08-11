@@ -24,6 +24,7 @@ This Rust library was named after the Tin Man. He, also known as the Tin Woodman
 | `LinearThermometer` | Uniform across `[min, max]` |
 | `GaussianThermometer` | Concentrated near the mean (normal CDF) |
 | `DistributiveThermometer` | Quantile-based, fit from data |
+| `KernelCanvas` | Variable-length sequences of points into a fixed-size binary "canvas" via random kernels |
 
 ## Project layout
 
@@ -70,6 +71,7 @@ cargo run --example <name>
 | `clus_regression_wisard_basic` | Multi-cluster regression with `ClusRegressionWisard` and grouped predictions |
 | `thermometer_encoding` | Fitting and applying `LinearThermometer`, `GaussianThermometer`, and `DistributiveThermometer` to continuous features |
 | `persistence` | Saving and loading trained models via `FileFormat::Json` and `FileFormat::Binary` |
+| `kernel_canvas_timeseries` | Classifying variable-length 2D strokes (diagonal vs. circular) via `KernelCanvas` + `Wisard` |
 
 ### `tests/`
 
