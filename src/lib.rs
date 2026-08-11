@@ -93,3 +93,14 @@ pub use encoders::{DistributiveThermometer, GaussianThermometer, LinearThermomet
 pub use persist::FileFormat;
 pub use regression_wisard::RegressionWisard;
 pub use wisard::Wisard;
+
+mod bloom_ram;
+mod bloom_discriminator;
+mod bloom_wisard;
+mod bloom_clus_wisard;
+mod bloom_regression_ram;
+mod bloom_regression_wisard;
+
+pub use bloom_wisard::BloomWisard;
+pub use bloom_clus_wisard::BloomClusWisard;
+pub use bloom_regression_wisard::BloomRegressionWisard;

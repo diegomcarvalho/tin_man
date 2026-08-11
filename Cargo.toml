@@ -23,3 +23,7 @@ criterion = { version = "0.5", features = ["html_reports"] }
 [[bench]]
 name = "wisard_bench"
 harness = false
+
+[[bench]]
+name = "bloom_wisard_bench"
+harness = false
