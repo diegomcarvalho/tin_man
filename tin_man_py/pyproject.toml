@@ -1,0 +1,20 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+[project]
+name = "tin_man_py"
+version = "0.5.1"
+description = "A Rust library for WiSARD-family weightless neural networks: WiSARD, ClusWiSARD, and Regression WiSARD."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {file = "LICENSE.txt"}
+keywords = ["WiSARD", "weightless", "neural-networks", "ClusWiSARD", "Regression WiSARD"]
+authors = [
+  {email = "d.carvalho@ieee.org"},
+  {name = "Diego Carvalho"}
+]
+maintainers = [
+  {name = "Diego Carvalho", email = "d.carvalho@ieee.org"}
+]
+[tool.maturin]
+module-name = "tin_man.tin_man_py"

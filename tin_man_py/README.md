@@ -32,3 +32,29 @@ rew = tin_man_py.RegressionWisard(64, 8, 1)
 rew.train([1, 0, 1, 0] * 16, 10.5)
 print(rew.predict([1, 0, 1, 0] * 16))
 ```
+
+# Comparison
+
+```
+In [1]: import tin_man_py
+
+In [2]: w = tin_man_py.Wisard(input_size=64, address_size=8, confidence_threshold=0.1,bleaching_enabled=True, ignore_zero=False,parallel=False)
+
+In [3]: w.train([1, 0, 1, 0] * 16, "class_a")
+
+In [4]: w.train([0, 1, 0, 1] * 16, "class_b")
+
+In [5]: import wisardpkg as wp
+
+In [6]: wsd = wp.Wisard(8, ignoreZero=False)
+
+In [7]: w.train([0, 1, 0, 1] * 16, "class_b")
+
+In [8]: w.train([1, 0, 1, 0] * 16, "class_a")
+
+In [9]: %timeit wsd.classify([[1, 0, 1, 0] * 16])
+1.12 μs ± 2.38 ns per loop (mean ± std. dev. of 7 runs, 1,000,000 loops each)
+
+In [10]: %timeit w.classify([1, 0, 1, 0] * 16)
+1.05 μs ± 0.976 ns per loop (mean ± std. dev. of 7 runs, 1,000,000 loops each)
+```
