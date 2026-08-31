@@ -17,7 +17,7 @@ environment as an importable module. For a distributable wheel instead, run matu
 import tin_man_py
 # Standard WiSARD
 w = tin_man_py.Wisard(input_size=64, address_size=8, confidence_threshold=0.1,
-bleaching_enabled=True, ignore_zero=False)
+bleaching_enabled=True, ignore_zero=False, parallel=True)
 w.train([1, 0, 1, 0] * 16, "class_a")
 w.train([0, 1, 0, 1] * 16, "class_b")
 print(w.classify([1, 0, 1, 0] * 16)) # ('class_a', 0.875)
