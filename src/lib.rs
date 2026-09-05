@@ -36,6 +36,7 @@
 //!     0.1,   // confidence_threshold: bleaching stop condition
 //!     true,  // bleaching_enabled
 //!     false, // ignore_zero
+//!     false, // parallel evaluation of discriminators
 //! );
 //!
 //! w.train(&, "cold");[1]
