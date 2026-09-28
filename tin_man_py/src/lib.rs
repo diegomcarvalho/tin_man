@@ -82,17 +82,16 @@ struct PyWisard {
 #[pymethods]
 impl PyWisard {
     #[new]
-    #[pyo3(signature = (input_size, address_size, confidence_threshold, bleaching_enabled, ignore_zero,parallel))]
+    #[pyo3(signature = (input_size, address_size, bleaching_enabled, ignore_zero,parallel))]
     fn new(
         input_size: usize,
         address_size: usize,
-        confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
         parallel: bool,
     ) -> Self {
         PyWisard {
-            inner: Wisard::new(input_size, address_size, confidence_threshold, bleaching_enabled, ignore_zero, parallel),
+            inner: Wisard::new(input_size, address_size, bleaching_enabled, ignore_zero, parallel),
         }
     }
 

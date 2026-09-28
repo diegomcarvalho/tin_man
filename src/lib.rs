@@ -33,7 +33,6 @@
 //! let mut w = Wisard::new(
 //!     8,     // input_size: retina length in bits
 //!     4,     // address_size: bits per RAM addressing bus
-//!     0.1,   // confidence_threshold: bleaching stop condition
 //!     true,  // bleaching_enabled
 //!     false, // ignore_zero
 //!     false, // parallel evaluation of discriminators
@@ -66,7 +65,7 @@
 //! ```no_run
 //! use tin_man::{FileFormat, Wisard};
 //!
-//! let w = Wisard::new(8, 4, 0.1, true, false);
+//! let w = Wisard::new(8, 4, true, false, false);
 //! w.save_to_file("model.json", FileFormat::Json).unwrap();
 //! let w2 = Wisard::load_from_file("model.json", FileFormat::Json).unwrap();
 //! ```

@@ -255,7 +255,7 @@ fn bench_bloom_wisard_num_hashes_sweep(c: &mut Criterion) {
 fn bench_memory_footprint_comparison(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
-    let mut exact = Wisard::new_with_seed(INPUT_SIZE, ADDRESS_SIZE, 0.1, true, false, false, SEED);
+    let mut exact = Wisard::new_with_seed(INPUT_SIZE, ADDRESS_SIZE, true, false, false, SEED);
     let mut bloom = BloomWisard::new_with_seed(
         INPUT_SIZE, ADDRESS_SIZE, BLOOM_SIZE, NUM_HASHES, 0.1, true, false, false, SEED,
     );

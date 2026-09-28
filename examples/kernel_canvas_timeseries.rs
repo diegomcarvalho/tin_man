@@ -65,7 +65,7 @@ fn main() {
     let canvas = KernelCanvas::new(24, 2, 4, 0.25, 42);
     println!("Canvas output size: {} bits\n", canvas.output_size());
 
-    let mut w = Wisard::new(canvas.output_size(), 6, 0.15, true, false, false);
+    let mut w = Wisard::new(canvas.output_size(), 6, true, false, false);
 
     // --- Training set ---
     // Diagonal strokes: varying point counts and jitter, both

@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 [project]
 name = "tin_man_py"
-version = "0.5.1"
+version = "0.5.2"
 description = "A Rust library for WiSARD-family weightless neural networks: WiSARD, ClusWiSARD, and Regression WiSARD."
 readme = "README.md"
 requires-python = ">=3.8"

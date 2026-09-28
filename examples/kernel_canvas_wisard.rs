@@ -8,7 +8,7 @@ fn main() {
     let stroke_down = vec![vec![-0.8, -0.8], vec![-0.4, -0.4], vec![0.0, 0.0]];
     let stroke_up = vec![vec![0.8, 0.8], vec![0.4, 0.4], vec![0.0, 0.0]];
 
-    let mut w = Wisard::new(canvas.output_size(), 8, 0.1, true, false, false);
+    let mut w = Wisard::new(canvas.output_size(), 8, true, false, false);
     w.train(&canvas.encode_sequence(&stroke_down), "diagonal_down");
     w.train(&canvas.encode_sequence(&stroke_up), "diagonal_up");
 

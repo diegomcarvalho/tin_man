@@ -161,6 +161,9 @@ using this library from Python via PyO3/maturin.
 cargo doc --open --no-deps
 ```
 
+## TODO
+- tin_man_py: implement binds for bloom functions
+- tin_man: check bleaching on every class (bloom uses bissection and wisard uses only tie break)
 ## License
 
 MIT

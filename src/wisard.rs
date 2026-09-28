@@ -46,7 +46,6 @@ pub struct Wisard {
     mapping: Vec<usize>,
     labels: Vec<String>,
     discriminators: Vec<Discriminator>,
-    confidence_threshold: f64,
     bleaching_enabled: bool,
     ignore_zero: bool,
     parallel: bool,
@@ -61,9 +60,6 @@ impl Wisard {
     /// - `address_size`: number of input bits routed into each RAM
     ///   (address space = 2^`address_size`). Must satisfy
     ///   `0 < address_size <= input_size`.
-    /// - `confidence_threshold`: minimum score gap between the top two
-    ///   classes required to stop the bleaching search. Only used when
-    ///   `bleaching_enabled` is `true`.
     /// - `bleaching_enabled`: if `false`, classification uses a fixed
     ///   threshold of 1 (plain binary WiSARD). If `true`, an adaptive
     ///   binary-search bleaching threshold is used to resolve ties and
@@ -91,7 +87,6 @@ impl Wisard {
     pub fn new(
         input_size: usize,
         address_size: usize,
-        confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
         parallel: bool,
@@ -107,7 +102,6 @@ impl Wisard {
             input_size,
             address_size,
             mapping,
-            confidence_threshold,
             bleaching_enabled,
             ignore_zero,
             parallel,
@@ -129,7 +123,6 @@ impl Wisard {
     pub fn new_with_seed(
         input_size: usize,
         address_size: usize,
-        confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
         parallel: bool,
@@ -147,7 +140,6 @@ impl Wisard {
             input_size,
             address_size,
             mapping,
-            confidence_threshold,
             bleaching_enabled,
             ignore_zero,
             parallel,
@@ -158,7 +150,6 @@ impl Wisard {
         input_size: usize,
         address_size: usize,
         mapping: Vec<usize>,
-        confidence_threshold: f64,
         bleaching_enabled: bool,
         ignore_zero: bool,
         parallel: bool,
@@ -169,7 +160,6 @@ impl Wisard {
             mapping,
             labels: Vec::new(),
             discriminators: Vec::new(),
-            confidence_threshold,
             bleaching_enabled,
             ignore_zero,
             parallel,
@@ -292,39 +282,53 @@ impl Wisard {
                 .max(1)
         };
 
-        let mut lo: u16 = 1;
-        let hi: u16 = global_max;
+        // Start at threshold 1, considering every discriminator a
+        // candidate for the win.
+        let mut threshold: u16 = 1;
+        let mut candidates: Vec<usize> = (0..self.discriminators.len()).collect();
+        let mut best_score: f64;
 
-        let best: (usize, f64) = loop {
-            let mid = lo + (hi - lo) / 2;
-            let mut scores: Vec<(usize, f64)> = if self.parallel {
-                self.discriminators
-                    .par_iter()
-                    .zip(addr_cache.par_iter())
-                    .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
-                    .enumerate()
-                    .collect()
-            } else {
-                self.discriminators
-                    .iter()
-                    .zip(addr_cache.iter())
-                    .map(|(disc, addrs)| disc.score_at(addrs, mid) as f64 / disc.rams.len().max(1) as f64)
-                    .enumerate()
-                    .collect()
+        loop {
+            let score_at = |i: usize| -> f64 {
+                let disc = &self.discriminators[i];
+                let addrs = &addr_cache[i];
+                disc.score_at(addrs, threshold) as f64 / disc.rams.len().max(1) as f64
             };
 
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
-            let top = scores[0];
-            let gap = if scores.len() > 1 { top.1 - scores[1].1 } else { top.1 };
+            let scores: Vec<(usize, f64)> = if self.parallel {
+                candidates.par_iter().map(|&i| (i, score_at(i))).collect()
+            } else {
+                candidates.iter().map(|&i| (i, score_at(i))).collect()
+            };
 
-            if gap >= self.confidence_threshold || lo >= hi {
-                break top;
+            let max_score = scores
+                .iter()
+                .map(|(_, s)| *s)
+                .fold(f64::MIN, f64::max);
+
+            let tied: Vec<usize> = scores
+                .iter()
+                .filter(|(_, s)| *s == max_score)
+                .map(|(i, _)| *i)
+                .collect();
+
+            best_score = max_score;
+
+            // Tie broken (single candidate left), or we've exhausted
+            // every threshold up to global_max without breaking the
+            // tie — stop and take the first tied candidate either way.
+            if tied.len() <= 1 || threshold >= global_max {
+                candidates = tied;
+                break;
             }
-            lo = mid + 1;
-        };
+            candidates = tied;
+            threshold += 1;
+        }
 
-        Some((self.labels[best.0].clone(), best.1))
+        let best_idx = candidates[0];
+        Some((self.labels[best_idx].clone(), best_score))
     }
+
 
     /// Saves the trained model (retina mapping, labels, and all RAM
     /// counters) to `path` in the given [`FileFormat`].
